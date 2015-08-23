@@ -75,20 +75,87 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 </ul></li>
 <li>Considered k fold cross validation within the scope of this project.</li>
 </ul>
+<pre class="r"><code>library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+
+# download training data set
+#trainURL &lt;- &quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv&quot;
+trainFile &lt;- &quot;pml-training.csv&quot;
+#download.file(trainURL, trainFile)
+
+# download test data set
+#testURL &lt;- &quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv&quot;
+testFile &lt;- 'pml-testing.csv'
+#download.file(testURL, testFile)
+
+# read data sets into memory, set NA for missing and NAN values. 
+training.orig &lt;- read.csv(trainFile, na.strings=c(&quot;NA&quot;,&quot;#DIV/0!&quot;,&quot;&quot;))
+
+testing.orig &lt;- read.csv(testFile, na.strings=c(&quot;NA&quot;,&quot;#DIV/0!&quot;,&quot;&quot;))
+
+# set the seed to reproduce the results. 
+set.seed(45678)
+
+# cleaning.
+## assign it to short variable names for convenience.
+t &lt;- training.orig
+test &lt;- testing.orig
+
+# Remove all columns that have any NA values.
+t.1 &lt;- t[, colSums(is.na(t)) == 0]
+
+# Remove meta data columns, with following names. 
+m_names &lt;- c(&quot;X&quot;, &quot;user_name&quot;, &quot;raw_timestamp_part_1&quot;, &quot;raw_timestamp_part_2&quot;, &quot;cvtd_timestamp&quot;, &quot;new_window&quot;, &quot;num_window&quot;)
+# corresponding column numbers
+m_num &lt;- c(1, 2, 3, 4, 5, 6, 7)
+# remove these columns from t.1
+t.2 &lt;- t.1[,-m_num]</code></pre>
 </div>
 <div id="exploratory-data-analysis-and-cleaning" class="section level2">
 <h2>Exploratory Data Analysis and Cleaning</h2>
 <ul>
-<li>Examined the raw data and removed all columns with <em>NA</em>, <em>#DIV/0!</em>, and <em><Empty Value></em></li>
+<li>Examined the raw data and removed all columns with <em>NA</em>, <em>#DIV/0!</em>, and <em>Empty Values</em></li>
 <li>Did not consider any imputing data, such as <em>knnImpute</em> for missing values.</li>
 <li>tested for near zero variance. Did not find any columns after removing <em>NA</em> columns.</li>
-<li>In selecting features, considered all columns remaining after removing columns with <em>NA</em>, except for following meta or string data. Actually I considered with and with out and there is not much difference in final accuracy of models. For this report, I am not considering them. +<em>X</em>, <em>user_name</em>, <em>raw_timestamp_part_1</em>, <em>raw_timestamp_part_2</em>, <em>cvtd_timestamp</em>, <em>new_window</em>, <em>num_window</em></li>
 </ul>
+<pre class="r"><code># check if there are any near zero variance columns or close to constant values.
+nzvData &lt;- nearZeroVar(t.2)
+nzvData</code></pre>
 <pre><code>## integer(0)</code></pre>
+<pre class="r"><code># we had zero columns with zero variance.</code></pre>
+<ul>
+<li>In selecting features, considered all columns remaining after removing columns with <em>NA</em>, except for following meta or string data. Actually I considered with and with out and there is not much difference in final accuracy of models. For this report, I am not considering them.
+<ul>
+<li>Columns: <em>X</em>, <em>user_name</em>, <em>raw_timestamp_part_1</em>, <em>raw_timestamp_part_2</em>, <em>cvtd_timestamp</em>, <em>new_window</em>, <em>num_window</em></li>
+</ul></li>
+</ul>
+<pre class="r"><code># Now makes sure test data set that is used for submitting answers contain same columns
+n &lt;- colnames(t.2)
+test.1 &lt;- test[,n[-53]]
+
+# check if class of each column is same. 
+test.2 &lt;- test.1
+
+x &lt;- lapply(t.2, class)
+y &lt;- lapply(test.2, class)
+
+# all.equal command shows following columns to be different. 
+# all.equal(y, x[-53])
+#[1] &quot;Component &quot;magnet_dumbbell_z&quot;: 1 string mismatch&quot;
+#[2] &quot;Component &quot;magnet_forearm_y&quot;: 1 string mismatch&quot; 
+#[3] &quot;Component &quot;magnet_forearm_z&quot;: 1 string mismatch&quot; 
+# not sure if numeric class is same as integer. But change it to make sure we don't have problems with predict function.
+test.2[,'magnet_dumbbell_z'] &lt;- as.numeric(test.2[,'magnet_dumbbell_z'])
+test.2[,'magnet_forearm_y'] &lt;- as.numeric(test.2[,'magnet_forearm_y'])
+test.2[,'magnet_forearm_z'] &lt;- as.numeric(test.2[,'magnet_forearm_z'])</code></pre>
 </div>
 <div id="modeling-using-caret-package" class="section level2">
 <h2>Modeling using caret package</h2>
-<p>Using kfold (10 fold) cross validation.</p>
+<p>Using kfold (10 fold) cross validation for tuning the models and this cross validation is used to select the right model for the current project.</p>
 <pre class="r"><code># Used kfold (10 folds) cross validatoin for all models to tune training set.
 
 # specify cross validation option using trainControl to train function.
@@ -125,6 +192,7 @@ plot(ctreeFit)</code></pre>
 </div>
 <div id="classification-tree-rpart-package-model" class="section level3">
 <h3>Classification Tree (rpart package) model</h3>
+<p>Run the classification tree model from rpart package using <em>train</em> function from caret package of R. Show the results of cross validation and accuracy plot.</p>
 <pre class="r"><code># Rpart model
 rpartFit &lt;- train(classe ~ ., data = t.2, method = &quot;rpart&quot;, trControl = ctrl)
 
@@ -154,6 +222,7 @@ plot(rpartFit)</code></pre>
 </div>
 <div id="random-forest-tree-model-randomforest-package" class="section level3">
 <h3>Random Forest Tree Model (randomforest package)</h3>
+<p>Run the Rando Forest tree model from randomforest package using <em>train</em> function from caret package of R. Show the results of cross validation and accuracy plot.</p>
 <pre class="r"><code># rf model
 randomForestFit &lt;- train(classe ~ ., data = t.2, method = &quot;rf&quot;, trControl = ctrl)
 
@@ -197,6 +266,20 @@ predRandomForestFit &lt;- predict(randomForestFit, test.2)
 predRandomForestFit</code></pre>
 <pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
 ## Levels: A B C D E</code></pre>
+</div>
+<div id="generating-files-using-function-provided" class="section level2">
+<h2>Generating Files using function provided</h2>
+<p>Generate files using function provided by instructor of the course.</p>
+<pre class="r"><code># Use the function provided by coursera to write files for submission.
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0(&quot;problem_id_&quot;,i,&quot;.txt&quot;)
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predRandomForestFit)</code></pre>
 </div>
 
 
